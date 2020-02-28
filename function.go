@@ -134,7 +134,15 @@ func newInlineQueryResultArticle(id, title, content string) tgbotapi.InlineQuery
 	if len(content) <= 64 {
 		r.Description = content
 	} else {
-		r.Description = string([]rune(content)[:16])
+		last := 0
+		for i := range content {
+			if i <= 64 {
+				last = i
+			} else {
+				break
+			}
+		}
+		r.Description = content[:last]
 	}
 	return r
 }
