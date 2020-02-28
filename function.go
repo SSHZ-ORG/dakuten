@@ -156,10 +156,10 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 		Method:        "answerInlineQuery",
 		InlineQueryID: id,
 		Results: []tgbotapi.InlineQueryResultArticle{
-			newInlineQueryResultArticle(id+"a", "濁音", toExternalDakuon(query)),
-			newInlineQueryResultArticle(id+"b", "濁音（結合文字）", toCombiningDakuon(query)),
-			newInlineQueryResultArticle(id+"c", "半濁音", toExternalHandakuon(query)),
-			newInlineQueryResultArticle(id+"d", "半濁音（結合文字）", toCombiningHandakuon(query)),
+			newInlineQueryResultArticle(id+"dc", "濁音（結合文字）", toCombiningDakuon(query)),
+			newInlineQueryResultArticle(id+"hc", "半濁音（結合文字）", toCombiningHandakuon(query)),
+			newInlineQueryResultArticle(id+"de", "濁音", toExternalDakuon(query)),
+			newInlineQueryResultArticle(id+"he", "半濁音", toExternalHandakuon(query)),
 		},
 	}
 
