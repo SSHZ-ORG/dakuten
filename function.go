@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"golang.org/x/text/width"
@@ -134,6 +135,16 @@ func toCombiningHandakuon(in string) string {
 	return toCombiningInternal(in, handakuonTable, chm, hhm)
 }
 
+var converters = []struct {
+	ID, Name string
+	Func     func(string) string
+}{
+	{"dc", "濁音（結合文字）", toCombiningDakuon},
+	{"hc", "半濁音（結合文字）", toCombiningHandakuon},
+	{"de", "濁音", toExternalDakuon},
+	{"he", "半濁音", toExternalHandakuon},
+}
+
 type answerInlineQueryResponse struct {
 	Method        string                              `json:"method"` // Must be answerInlineQuery
 	InlineQueryID string                              `json:"inline_query_id"`
@@ -158,6 +169,64 @@ func newInlineQueryResultArticle(id, title, content string) tgbotapi.InlineQuery
 	return r
 }
 
+func handleInlineQuery(in *tgbotapi.InlineQuery) *answerInlineQueryResponse {
+	id := in.ID
+	query := in.Query
+
+	results := []tgbotapi.InlineQueryResultArticle{}
+	for _, c := range converters {
+		results = append(results, newInlineQueryResultArticle(id+c.ID, c.Name, c.Func(query)))
+	}
+
+	return &answerInlineQueryResponse{
+		Method:        "answerInlineQuery",
+		InlineQueryID: id,
+		Results:       results,
+	}
+}
+
+type sendMessageResponse struct {
+	Method string `json:"method"` // Must be sendMessage
+	ChatID int64  `json:"chat_id"`
+	Text   string `json:"text"`
+}
+
+func handleMessage(in *tgbotapi.Message) *sendMessageResponse {
+	if in.Command() != "" {
+		return nil
+	}
+
+	msg := in.Text
+	out := strings.Builder{}
+	curLen := 0
+
+	for _, c := range converters {
+		s := c.Func(msg)
+		thisLen := 1 + utf8.RuneCountInString(c.Name) + 1 + utf8.RuneCountInString(s) + 1
+		if (curLen + thisLen) < 4096 {
+			curLen += thisLen
+			out.WriteRune('\n')
+			out.WriteString(c.Name)
+			out.WriteRune('\n')
+			out.WriteString(s)
+			out.WriteRune('\n')
+		} else {
+			break
+		}
+	}
+
+	r := "Input is too long!"
+	if out.Len() > 0 {
+		r = out.String()
+	}
+
+	return &sendMessageResponse{
+		Method: "sendMessage",
+		ChatID: in.Chat.ID,
+		Text:   r,
+	}
+}
+
 func Webhook(w http.ResponseWriter, r *http.Request) {
 	bytes, _ := ioutil.ReadAll(r.Body)
 
@@ -168,24 +237,15 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if update.InlineQuery == nil || update.InlineQuery.Query == "" {
-		return
+	var resp interface{} = nil
+	if update.InlineQuery != nil && update.InlineQuery.Query != "" {
+		resp = handleInlineQuery(update.InlineQuery)
+	} else if update.Message != nil && update.Message.Text != "" {
+		resp = handleMessage(update.Message)
 	}
 
-	id := update.InlineQuery.ID
-	query := update.InlineQuery.Query
-
-	result := answerInlineQueryResponse{
-		Method:        "answerInlineQuery",
-		InlineQueryID: id,
-		Results: []tgbotapi.InlineQueryResultArticle{
-			newInlineQueryResultArticle(id+"dc", "濁音（結合文字）", toCombiningDakuon(query)),
-			newInlineQueryResultArticle(id+"hc", "半濁音（結合文字）", toCombiningHandakuon(query)),
-			newInlineQueryResultArticle(id+"de", "濁音", toExternalDakuon(query)),
-			newInlineQueryResultArticle(id+"he", "半濁音", toExternalHandakuon(query)),
-		},
+	if resp != nil {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(resp)
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(result)
 }
