@@ -5,6 +5,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"strings"
+	"unicode"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
 	"golang.org/x/text/width"
@@ -61,6 +62,11 @@ func toExternalInternal(in string, fm, hm rune) string {
 			continue
 		}
 
+		if !unicode.IsGraphic(i) {
+			o.WriteRune(i)
+			continue
+		}
+
 		if e, ok := reversedDakuonTable[i]; ok {
 			i = e
 		} else if e, ok := reversedHandakuonTable[i]; ok {
@@ -90,6 +96,11 @@ func toCombiningInternal(in string, t map[rune]rune, cm, hm rune) string {
 	o := strings.Builder{}
 	for _, i := range in {
 		if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
+			continue
+		}
+
+		if !unicode.IsGraphic(i) {
+			o.WriteRune(i)
 			continue
 		}
 
