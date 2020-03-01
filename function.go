@@ -139,10 +139,10 @@ var converters = []struct {
 	ID, Name string
 	Func     func(string) string
 }{
-	{"dc", "濁音（結合文字）", toCombiningDakuon},
-	{"hc", "半濁音（結合文字）", toCombiningHandakuon},
-	{"de", "濁音", toExternalDakuon},
-	{"he", "半濁音", toExternalHandakuon},
+	{"dc", "濁点（結合文字）", toCombiningDakuon},
+	{"hc", "半濁点（結合文字）", toCombiningHandakuon},
+	{"de", "濁点", toExternalDakuon},
+	{"he", "半濁点", toExternalHandakuon},
 }
 
 type answerInlineQueryResponse struct {
@@ -174,8 +174,10 @@ func handleInlineQuery(in *tgbotapi.InlineQuery) *answerInlineQueryResponse {
 	query := in.Query
 
 	results := []tgbotapi.InlineQueryResultArticle{}
-	for _, c := range converters {
-		results = append(results, newInlineQueryResultArticle(id+c.ID, c.Name, c.Func(query)))
+	if query != "" {
+		for _, c := range converters {
+			results = append(results, newInlineQueryResultArticle(id+c.ID, c.Name, c.Func(query)))
+		}
 	}
 
 	return &answerInlineQueryResponse{
@@ -197,6 +199,10 @@ func handleMessage(in *tgbotapi.Message) *sendMessageResponse {
 	}
 
 	msg := in.Text
+	if msg == "" {
+		return nil
+	}
+
 	out := strings.Builder{}
 	curLen := 0
 
@@ -238,9 +244,9 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var resp interface{} = nil
-	if update.InlineQuery != nil && update.InlineQuery.Query != "" {
+	if update.InlineQuery != nil {
 		resp = handleInlineQuery(update.InlineQuery)
-	} else if update.Message != nil && update.Message.Text != "" {
+	} else if update.Message != nil {
 		resp = handleMessage(update.Message)
 	}
 
