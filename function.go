@@ -9,33 +9,19 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-telegram-bot-api/telegram-bot-api/v5"
+	"github.com/rivo/uniseg"
+	"golang.org/x/text/unicode/norm"
 	"golang.org/x/text/width"
 )
 
 var (
-	dakuonTable = map[rune]rune{
-		'か': 'が', 'き': 'ぎ', 'く': 'ぐ', 'け': 'げ', 'こ': 'ご',
-		'さ': 'ざ', 'し': 'じ', 'す': 'ず', 'せ': 'ぜ', 'そ': 'ぞ',
-		'た': 'だ', 'ち': 'ぢ', 'つ': 'づ', 'て': 'で', 'と': 'ど',
-		'は': 'ば', 'ひ': 'び', 'ふ': 'ぶ', 'へ': 'べ', 'ほ': 'ぼ',
-		'う': 'ゔ',
-		'ゝ': 'ゞ',
-		'カ': 'ガ', 'キ': 'ギ', 'ク': 'グ', 'ケ': 'ゲ', 'コ': 'ゴ',
-		'サ': 'ザ', 'シ': 'ジ', 'ス': 'ズ', 'セ': 'ゼ', 'ソ': 'ゾ',
-		'タ': 'ダ', 'チ': 'ヂ', 'ツ': 'ヅ', 'テ': 'デ', 'ト': 'ド',
-		'ハ': 'バ', 'ヒ': 'ビ', 'フ': 'ブ', 'ヘ': 'ベ', 'ホ': 'ボ',
-		'ウ': 'ヴ',
-		'ワ': 'ヷ', 'ヰ': 'ヸ', 'ヱ': 'ヹ', 'ヲ': 'ヺ',
-		'ヽ': 'ヾ',
-		'〳': '〴', '〱': '〲',
+	// Table of runes that are not properly handled by NFC when added U+3099.
+	specialHandlingTable = map[rune]rune{
+		// Odoriji
+		'〳': '〴', // U+3033 + U+3099 = U+3034, VERTICAL KANA REPEAT MARK UPPER HALF
+		'〱': '〲', // U+3031 + U+3099 = U+3032, VERTICAL KANA REPEAT MARK
 	}
-	reversedDakuonTable = reversed(dakuonTable)
-
-	handakuonTable = map[rune]rune{
-		'は': 'ぱ', 'ひ': 'ぴ', 'ふ': 'ぷ', 'へ': 'ぺ', 'ほ': 'ぽ',
-		'ハ': 'パ', 'ヒ': 'ピ', 'フ': 'プ', 'ヘ': 'ペ', 'ホ': 'ポ',
-	}
-	reversedHandakuonTable = reversed(handakuonTable)
+	reversedSpecialHandlingTable = reversed(specialHandlingTable)
 )
 
 func reversed(m map[rune]rune) map[rune]rune {
@@ -56,83 +42,75 @@ const (
 	hhm = 'ﾟ' // U+FF9F, HALFWIDTH KATAKANA SEMI-VOICED SOUND MARK
 )
 
-func toExternalInternal(in string, fm, hm rune) string {
+func convertInternal(in string, fm, hm rune) string {
 	o := strings.Builder{}
-	for _, i := range in {
-		if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
+
+	gr := uniseg.NewGraphemes(norm.NFD.String(in))
+	for gr.Next() {
+		rs := gr.Runes()
+		r := rs[0]
+
+		// Not printable. We should keep it as-is.
+		if !unicode.IsGraphic(r) {
+			o.WriteString(string(rs))
 			continue
 		}
 
-		if !unicode.IsGraphic(i) {
+		// In special handling table.
+		var sp rune
+		if _, ok := specialHandlingTable[r]; ok {
+			sp = r
+		} else if o, ok := reversedSpecialHandlingTable[r]; ok {
+			sp = o
+		}
+		if sp != rune(0) { // It is in the table.
+			if fm == cdm { // We are supposed to add U+3099.
+				o.WriteRune(specialHandlingTable[sp]) // Use the mapped rune.
+			} else { // Otherwise, use the original rune, and wanted rune.
+				o.WriteRune(sp)
+				o.WriteRune(fm)
+			}
+			for _, i := range rs[1:] { // Append other required runes.
+				if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
+					continue
+				}
+				o.WriteRune(i)
+			}
+			continue
+		}
+
+		for _, i := range rs {
+			if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
+				continue
+			}
 			o.WriteRune(i)
-			continue
 		}
 
-		if e, ok := reversedDakuonTable[i]; ok {
-			i = e
-		} else if e, ok := reversedHandakuonTable[i]; ok {
-			i = e
-		}
-
-		o.WriteRune(i)
-		switch width.LookupRune(i).Kind() {
+		switch width.LookupRune(r).Kind() {
 		case width.EastAsianFullwidth, width.EastAsianWide:
 			o.WriteRune(fm)
 		default:
 			o.WriteRune(hm)
 		}
 	}
-	return o.String()
+
+	return norm.NFC.String(o.String())
 }
 
 func toExternalDakuon(in string) string {
-	return toExternalInternal(in, fdm, hdm)
+	return convertInternal(in, fdm, hdm)
 }
 
 func toExternalHandakuon(in string) string {
-	return toExternalInternal(in, fhm, hhm)
-}
-
-func toCombiningInternal(in string, t map[rune]rune, cm, hm rune) string {
-	o := strings.Builder{}
-	for _, i := range in {
-		if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
-			continue
-		}
-
-		if !unicode.IsGraphic(i) {
-			o.WriteRune(i)
-			continue
-		}
-
-		if e, ok := reversedDakuonTable[i]; ok {
-			i = e
-		} else if e, ok := reversedHandakuonTable[i]; ok {
-			i = e
-		}
-
-		if e, ok := t[i]; ok {
-			o.WriteRune(e)
-			continue
-		}
-
-		o.WriteRune(i)
-		switch width.LookupRune(i).Kind() {
-		case width.EastAsianFullwidth, width.EastAsianWide:
-			o.WriteRune(cm)
-		default:
-			o.WriteRune(hm)
-		}
-	}
-	return o.String()
+	return convertInternal(in, fhm, hhm)
 }
 
 func toCombiningDakuon(in string) string {
-	return toCombiningInternal(in, dakuonTable, cdm, hdm)
+	return convertInternal(in, cdm, hdm)
 }
 
 func toCombiningHandakuon(in string) string {
-	return toCombiningInternal(in, handakuonTable, chm, hhm)
+	return convertInternal(in, chm, hhm)
 }
 
 var converters = []struct {

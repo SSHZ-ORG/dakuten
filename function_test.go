@@ -2,9 +2,8 @@ package dakuten
 
 import "testing"
 
-const input = "たねだりさ。種田梨沙。Taneda Risa. ﾀﾈﾀﾞﾘｻ。ポピパ、ぽぴぱ、ﾎﾟﾋﾟﾊﾟ!"
-
 func TestDakuon(t *testing.T) {
+	input := "たねだりさ。種田梨沙。Taneda Risa. ﾀﾈﾀﾞﾘｻ。ポピパ、ぽぴぱ、ﾎﾟﾋﾟﾊﾟ!"
 	tests := []struct {
 		name     string
 		f        (func(string) string)
@@ -23,5 +22,58 @@ func TestDakuon(t *testing.T) {
 				t.Errorf("%s; want %s; got %s", tt.name, tt.expected, got)
 			}
 		})
+	}
+}
+
+// はひふへほハヒフヘホ
+// ぱぴぷぺぽパピプペポ
+// 〳〱〴〲
+func TestDakuon_Mapping(t *testing.T) {
+	input := "かきくけこさしすせそたちつてとはひふへほうゝカキクケコサシスセソタチツテトハヒフヘホウワヰヱヲヽがぎぐげござじずぜぞだぢづでどばびぶべぼゔゞガギグゲゴザジズゼゾダヂヅデドバビブベボヴヷヸヹヺヾぱぴぷぺぽパピプペポ"
+
+	dakuonExpected := "がぎぐげござじずぜぞだぢづでどばびぶべぼゔゞガギグゲゴザジズゼゾダヂヅデドバビブベボヴヷヸヹヺヾがぎぐげござじずぜぞだぢづでどばびぶべぼゔゞガギグゲゴザジズゼゾダヂヅデドバビブベボヴヷヸヹヺヾばびぶべぼバビブベボ"
+	dakuonGot := toCombiningDakuon(input)
+	if dakuonGot != dakuonExpected {
+		t.Errorf("toCombiningDakuon; want %s; got %s", dakuonExpected, dakuonGot)
+	}
+
+	handakuonExpected := "か゚き゚く゚け゚こ゚さ゚し゚す゚せ゚そ゚た゚ち゚つ゚て゚と゚ぱぴぷぺぽう゚ゝ゚カ゚キ゚ク゚ケ゚コ゚サ゚シ゚ス゚セ゚ソ゚タ゚チ゚ツ゚テ゚ト゚パピプペポウ゚ワ゚ヰ゚ヱ゚ヲ゚ヽ゚か゚き゚く゚け゚こ゚さ゚し゚す゚せ゚そ゚た゚ち゚つ゚て゚と゚ぱぴぷぺぽう゚ゝ゚カ゚キ゚ク゚ケ゚コ゚サ゚シ゚ス゚セ゚ソ゚タ゚チ゚ツ゚テ゚ト゚パピプペポウ゚ワ゚ヰ゚ヱ゚ヲ゚ヽ゚ぱぴぷぺぽパピプペポ"
+	handakuonGot := toCombiningHandakuon(input)
+	if handakuonGot != handakuonExpected {
+		t.Errorf("toCombiningHandakuon; want %s; got %s", handakuonExpected, handakuonGot)
+	}
+}
+
+func TestDakuon_Odoriji(t *testing.T) {
+	input := "〳〱〴〲"
+
+	dakuonExpected := "〴〲〴〲"
+	dakuonGot := toCombiningDakuon(input)
+	if dakuonGot != dakuonExpected {
+		t.Errorf("toCombiningDakuon; want %s; got %s", dakuonExpected, dakuonGot)
+	}
+
+	handakuonExpected := "〳゚〱゚〳゚〱゚"
+	handakuonGot := toCombiningHandakuon(input)
+	if handakuonGot != handakuonExpected {
+		t.Errorf("toCombiningHandakuon; want %s; got %s", handakuonExpected, handakuonGot)
+	}
+}
+
+func TestDakuon_Control(t *testing.T) {
+	input := "\n\t いちえちゃん"
+	dakuonExpected := "\n\t ﾞい゙ぢえ゙ぢゃ゙ん゙"
+	dakuonGot := toCombiningDakuon(input)
+	if dakuonGot != dakuonExpected {
+		t.Errorf("toCombiningDakuon; want %s; got %s", dakuonExpected, dakuonGot)
+	}
+}
+
+func TestDakuon_Combining(t *testing.T) {
+	input := "🇯🇵"
+	dakuonExpected := "🇯🇵ﾞ"
+	dakuonGot := toCombiningDakuon(input)
+	if dakuonGot != dakuonExpected {
+		t.Errorf("toCombiningDakuon; want %s; got %s", dakuonExpected, dakuonGot)
 	}
 }
