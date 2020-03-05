@@ -15,21 +15,21 @@ import (
 )
 
 var (
-	// Table of runes that are not properly handled by NFC when added U+3099.
-	specialHandlingTable = map[rune]rune{
+	// Replacers to handle runes that are not properly handled by norm.NFD / norm.NFC.
+	toNFCExtraReplacer, toNFDExtraReplacer = constructReplacers(map[string]string{
 		// Odoriji
-		'〳': '〴', // U+3033 + U+3099 = U+3034, VERTICAL KANA REPEAT MARK UPPER HALF
-		'〱': '〲', // U+3031 + U+3099 = U+3032, VERTICAL KANA REPEAT MARK
-	}
-	reversedSpecialHandlingTable = reversed(specialHandlingTable)
+		"〳゙": "〴", // U+3033 + U+3099 = U+3034, VERTICAL KANA REPEAT MARK UPPER HALF
+		"〱゙": "〲", // U+3031 + U+3099 = U+3032, VERTICAL KANA REPEAT MARK
+	})
 )
 
-func reversed(m map[rune]rune) map[rune]rune {
-	o := make(map[rune]rune)
-	for k, v := range m {
-		o[v] = k
+func constructReplacers(m map[string]string) (*strings.Replacer, *strings.Replacer) {
+	var toC, toD []string
+	for d, c := range m {
+		toC = append(toC, d, c)
+		toD = append(toD, c, d)
 	}
-	return o
+	return strings.NewReplacer(toC...), strings.NewReplacer(toD...)
 }
 
 const (
@@ -45,7 +45,7 @@ const (
 func convertInternal(in string, fm, hm rune) string {
 	o := strings.Builder{}
 
-	gr := uniseg.NewGraphemes(norm.NFD.String(in))
+	gr := uniseg.NewGraphemes(toNFDExtraReplacer.Replace(norm.NFD.String(in)))
 	for gr.Next() {
 		rs := gr.Runes()
 		r := rs[0]
@@ -53,29 +53,6 @@ func convertInternal(in string, fm, hm rune) string {
 		// Not printable. We should keep it as-is.
 		if !unicode.IsGraphic(r) {
 			o.WriteString(string(rs))
-			continue
-		}
-
-		// In special handling table.
-		var sp rune
-		if _, ok := specialHandlingTable[r]; ok {
-			sp = r
-		} else if o, ok := reversedSpecialHandlingTable[r]; ok {
-			sp = o
-		}
-		if sp != rune(0) { // It is in the table.
-			if fm == cdm { // We are supposed to add U+3099.
-				o.WriteRune(specialHandlingTable[sp]) // Use the mapped rune.
-			} else { // Otherwise, use the original rune, and wanted rune.
-				o.WriteRune(sp)
-				o.WriteRune(fm)
-			}
-			for _, i := range rs[1:] { // Append other required runes.
-				if i == fdm || i == cdm || i == hdm || i == fhm || i == chm || i == hhm {
-					continue
-				}
-				o.WriteRune(i)
-			}
 			continue
 		}
 
@@ -94,7 +71,7 @@ func convertInternal(in string, fm, hm rune) string {
 		}
 	}
 
-	return norm.NFC.String(o.String())
+	return toNFCExtraReplacer.Replace(norm.NFC.String(o.String()))
 }
 
 func toExternalDakuon(in string) string {
