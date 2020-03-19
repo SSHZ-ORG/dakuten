@@ -18,8 +18,8 @@ var (
 	// Replacers to handle runes that are not properly handled by norm.NFD / norm.NFC.
 	toNFCExtraReplacer, toNFDExtraReplacer = constructReplacers(map[string]string{
 		// Odoriji
-		"〳゙": "〴", // U+3033 + U+3099 = U+3034, VERTICAL KANA REPEAT MARK UPPER HALF
 		"〱゙": "〲", // U+3031 + U+3099 = U+3032, VERTICAL KANA REPEAT MARK
+		"〳゙": "〴", // U+3033 + U+3099 = U+3034, VERTICAL KANA REPEAT MARK UPPER HALF
 	})
 )
 
@@ -100,12 +100,6 @@ var converters = []struct {
 	{"he", "半濁点", toExternalHandakuon},
 }
 
-type answerInlineQueryResponse struct {
-	Method        string                              `json:"method"` // Must be answerInlineQuery
-	InlineQueryID string                              `json:"inline_query_id"`
-	Results       []tgbotapi.InlineQueryResultArticle `json:"results"`
-}
-
 func newInlineQueryResultArticle(id, title, content string) tgbotapi.InlineQueryResultArticle {
 	r := tgbotapi.NewInlineQueryResultArticle(id, title, content)
 	if len(content) <= 64 {
@@ -124,31 +118,24 @@ func newInlineQueryResultArticle(id, title, content string) tgbotapi.InlineQuery
 	return r
 }
 
-func handleInlineQuery(in *tgbotapi.InlineQuery) *answerInlineQueryResponse {
+func handleInlineQuery(in *tgbotapi.InlineQuery) *tgbotapi.InlineConfig {
 	id := in.ID
 	query := in.Query
 
-	results := []tgbotapi.InlineQueryResultArticle{}
+	results := &tgbotapi.InlineConfig{
+		InlineQueryID: id,
+	}
+
 	if query != "" {
 		for _, c := range converters {
-			results = append(results, newInlineQueryResultArticle(id+c.ID, c.Name, c.Func(query)))
+			results.Results = append(results.Results, newInlineQueryResultArticle(id+c.ID, c.Name, c.Func(query)))
 		}
 	}
 
-	return &answerInlineQueryResponse{
-		Method:        "answerInlineQuery",
-		InlineQueryID: id,
-		Results:       results,
-	}
+	return results
 }
 
-type sendMessageResponse struct {
-	Method string `json:"method"` // Must be sendMessage
-	ChatID int64  `json:"chat_id"`
-	Text   string `json:"text"`
-}
-
-func handleMessage(in *tgbotapi.Message) *sendMessageResponse {
+func handleMessage(in *tgbotapi.Message) *tgbotapi.MessageConfig {
 	if in.Command() != "" {
 		return nil
 	}
@@ -181,11 +168,8 @@ func handleMessage(in *tgbotapi.Message) *sendMessageResponse {
 		r = out.String()
 	}
 
-	return &sendMessageResponse{
-		Method: "sendMessage",
-		ChatID: in.Chat.ID,
-		Text:   r,
-	}
+	message := tgbotapi.NewMessage(in.Chat.ID, r)
+	return &message
 }
 
 func Webhook(w http.ResponseWriter, r *http.Request) {
@@ -198,7 +182,7 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var resp interface{} = nil
+	var resp tgbotapi.Chattable = nil
 	if update.InlineQuery != nil {
 		resp = handleInlineQuery(update.InlineQuery)
 	} else if update.Message != nil {
@@ -206,7 +190,6 @@ func Webhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if resp != nil {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(resp)
+		_ = tgbotapi.WriteToHTTPResponse(w, resp)
 	}
 }
