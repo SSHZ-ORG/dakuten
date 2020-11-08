@@ -90,12 +90,31 @@ func toCombiningHandakuon(in string) string {
 	return convertInternal(in, chm, hhm)
 }
 
+func insertSpaces(in string, sc string) string {
+	var gs []string
+	gr := uniseg.NewGraphemes(in)
+	for gr.Next() {
+		gs = append(gs, gr.Str())
+	}
+	return strings.Join(gs, sc)
+}
+
+func insertHalfwidthSpaces(in string) string {
+	return insertSpaces(in, " ")
+}
+
+func insertFullwidthSpaces(in string) string {
+	return insertSpaces(in, "　")
+}
+
 var converters = []struct {
 	ID, Name string
 	Func     func(string) string
 }{
 	{"dc", "濁点（結合文字）", toCombiningDakuon},
 	{"hc", "半濁点（結合文字）", toCombiningHandakuon},
+	{"hs", "Spaces", insertHalfwidthSpaces},
+	{"fs", "Fullwidth Spaces", insertFullwidthSpaces},
 	{"de", "濁点", toExternalDakuon},
 	{"he", "半濁点", toExternalHandakuon},
 }
